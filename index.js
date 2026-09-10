@@ -93,14 +93,14 @@ async function startSock() {
             return;
         }
 
-        if (textLower.includes('ফি') || textLower.includes('fee') || textLower.includes('টাকা') || textLower.includes('খরচ')) {
+        if (textLower.includes('ফি') || textLower.includes('fee') || textLower.includes('টাকা') || textLower.includes('খরচ') || textLower.includes('cost') || textLower.includes('price') || textLower.includes('fees')) {
             await sock.sendMessage(senderJid, { 
                 text: "ডা. দেবজ্যোতি দত্তের প্রথম ভিজিট ফি ১০০০ টাকা এবং ফলোআপ ৬০০ টাকা। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)" 
             });
             return;
         }
 
-        if (textLower.includes('কোথায়') || textLower.includes('ঠিকানা') || textLower.includes('location') || textLower.includes('চেম্বার')) {
+        if (textLower.includes('কোথায়') || textLower.includes('ঠিকানা') || textLower.includes('location') || textLower.includes('চেম্বার') || textLower.includes('address')) {
             await sock.sendMessage(senderJid, { 
                 text: "চেম্বারের ঠিকানা: ২/১, জাহেদা ভিলা, শ্যামলী কল্যাণ সমিতি, শ্যামলী, ঢাকা-১২০৭।\nগুগল ম্যাপ লিঙ্ক: https://maps.app.goo.gl/NgPzAZamW3Ucy8799" 
             });
