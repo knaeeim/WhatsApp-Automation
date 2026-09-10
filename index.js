@@ -15,7 +15,7 @@ app.listen(PORT, () => {
 });
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const GOOGLE_SHEET_URL = process.env.GOOGLE_SHEET_URL || 'আপনার_গুগল_শিটের_ওয়েব_অ্যাপ_ইউআরএল_এখানে_দিন';
+const GOOGLE_SHEET_URL = process.env.GOOGLE_SHEET_URL || 'আপনার_গুগল_শিটের_ওয়েব_অ্যাপ_ইউআরএল_এখানে_দিন';
 
 const knownNumbers = ['8801712854941']; 
 
@@ -65,6 +65,7 @@ async function startSock() {
             return;
         }
 
+        // মেসেজ থেকে টেক্সট বের করা
         const content = msg.message;
         const msg_body = content.conversation || 
                          content.extendedTextMessage?.text || 
@@ -80,8 +81,43 @@ async function startSock() {
 
         console.log("রিসিভড মেসেজ:", msg_body);
 
+        // ==========================================
+        // ১. সরাসরি কোড থেকে রুল-বেসড ফিল্টারিং (জেমিনাই কল হবে না, ফ্রি কোটা বাঁচবে)
+        // ==========================================
+        const textLower = msg_body.toLowerCase().trim();
+
+        if (['hello', 'hi', 'হাই', 'হ্যালো', 'সালাম', 'assalamu alaikum', 'আসসালামু আলাইকুম'].some(w => textLower === w)) {
+            await sock.sendMessage(senderJid, { 
+                text: "ওয়ালাইকুম আসসালাম। ডা. দেবজ্যোতি দত্তের চেম্বারে আপনাকে স্বাগতম। সিরিয়াল নিতে চাইলে রোগীর নাম ও মোবাইল নাম্বার লিখে মেসেজ দিন। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)" 
+            });
+            return;
+        }
+
+        if (textLower.includes('ফি') || textLower.includes('fee') || textLower.includes('টাকা') || textLower.includes('খরচ')) {
+            await sock.sendMessage(senderJid, { 
+                text: "ডা. দেবজ্যোতি দত্তের প্রথম ভিজিট ফি ১০০০ টাকা এবং ফলোআপ ৬০০ টাকা। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)" 
+            });
+            return;
+        }
+
+        if (textLower.includes('কোথায়') || textLower.includes('ঠিকানা') || textLower.includes('location') || textLower.includes('চেম্বার')) {
+            await sock.sendMessage(senderJid, { 
+                text: "চেম্বারের ঠিকানা: ২/১, জাহেদা ভিলা, শ্যামলী কল্যাণ সমিতি, শ্যামলী, ঢাকা-১২০৭।\nগুগল ম্যাপ লিঙ্ক: https://maps.app.goo.gl/NgPzAZamW3Ucy8799" 
+            });
+            return;
+        }
+
+        if (textLower.includes('অনলাইন') || textLower.includes('online')) {
+            await sock.sendMessage(senderJid, { 
+                text: "অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বারে হোয়াটসঅ্যাপে মেসেজ করে জানান।" 
+            });
+            return;
+        }
+
+        // ==========================================
+        // ২. সিরিয়াল ও জটিল মেসেজের জন্য জেমিনাই এআই কল
+        // ==========================================
         try {
-            // আজকের তারিখ, বার এবং সময় বের করা
             const now = new Date();
             const todayStr = now.toLocaleDateString('bn-BD', { 
                 weekday: 'long', 
@@ -92,11 +128,11 @@ async function startSock() {
             });
 
             /*
-              👉 প্রতি সপ্তাহে শুধু নিচের এই ৩টি লাইন পরিবর্তন করবেন:
+              👉 প্রতি সপ্তাহে শুধু নিচের এই কনফিগারেশন পরিবর্তন করবেন:
             */
             const currentWeekConfig = {
-                fridayAvailable: false,   // এই সপ্তাহে শুক্রবারে বসবেন কি না (true / false)
-                saturdayAvailable: true,  // এই সপ্তাহে শনিবারে বসবেন কি না (true / false)
+                fridayAvailable: false,   // শুক্রবারে বসবেন কি না (true / false)
+                saturdayAvailable: true,  // শনিবারে বসবেন কি না (true / false)
                 fridayDate: "11/09/2026",
                 saturdayDate: "12/09/2026"
             };
@@ -154,7 +190,6 @@ User message: ${msg_body}`;
             } else if (aiData.action === 'reply') {
                 finalReply = aiData.message;
             } else if (aiData.action === 'book') {
-                // গুগল শিটে নাম, ফোন এবং নির্দিষ্ট তারিখ পাঠানো হচ্ছে
                 const sheetResponse = await axios.post(GOOGLE_SHEET_URL, {
                     name: aiData.name,
                     phone: aiData.phone,
@@ -169,12 +204,13 @@ User message: ${msg_body}`;
 
         } catch (error) {
             console.error('Error processing message:', error.message);
+            
             // স্মার্ট ফলব্যাক
             const textLower = msg_body.toLowerCase();
-            let fallbackReply = "ডা. দেবজ্যোতি দত্তের চেম্বারে আপনাকে স্বাগতম। বিস্তারিত জানতে বা অ্যাপয়েন্টমেন্ট নিতে রোগীর নাম ও মোবাইল নাম্বার দিয়ে মেসেজ করুন।";
+            let fallbackReply = "ডা. দেবজ্যোতি দত্তের চেম্বারে আপনাকে স্বাগতম। বিস্তারিত জানতে বা অ্যাপয়েন্টমেন্ট নিতে রোগীর নাম ও মোবাইল নাম্বার দিয়ে মেসেজ করুন।";
             if (textLower.includes('ফি') || textLower.includes('fee') || textLower.includes('টাকা')) {
                 fallbackReply = "ডা. দেবজ্যোতি দত্তের প্রথম ভিজিট ফি ১০০০ টাকা এবং ফলোআপ ৬০০ টাকা। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)";
-            } else if (textLower.includes('কোথায়') || textLower.includes('ঠিকানা')) {
+            } else if (textLower.includes('কোথায়') || textLower.includes('ঠিকানা')) {
                 fallbackReply = "চেম্বারের ঠিকানা: ২/১, জাহেদা ভিলা, শ্যামলী কল্যাণ সমিতি, শ্যামলী, ঢাকা-১২০৭।";
             }
             await sock.sendMessage(senderJid, { text: fallbackReply });
