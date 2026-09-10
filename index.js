@@ -24,7 +24,8 @@ const client = new Client({
             '--no-first-run',
             '--no-zygote',
             '--single-process', // রেন্ডারের ফ্রি সার্ভারের জন্য এটি অত্যন্ত জরুরি
-            '--disable-gpu'
+            '--disable-gpu',
+            '--remote-debugging-port=9222'
         ]
     }
 });
