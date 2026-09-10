@@ -86,7 +86,7 @@ async function startSock() {
             const todayDate = new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' });
 
             const response = await ai.models.generateContent({
-                model: 'gemini-2.0-flash',
+                model: 'gemini-3.6-flash',
                 contents: `System: You are a polite and expert assistant for Md Khairul Bashar's medical clinic. Analyze the user's message and respond ONLY in valid JSON format.
                 Current Date & Time: ${todayDate}
                 
