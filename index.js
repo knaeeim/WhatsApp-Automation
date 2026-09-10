@@ -83,24 +83,23 @@ async function startSock() {
         try {
             const todayDate = new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' });
 
-            const promptText = `System: You are a polite and expert assistant for Md Khairul Bashar's medical clinic. Analyze the user's message and respond ONLY in valid JSON format.
+            const promptText = `System: You are an expert assistant for Dr. Debajyoti Datta's clinic. Analyze user message and return ONLY valid JSON format.
             Current Date: ${todayDate}
             
-            Clinic Info:
+            Info:
             - Schedule: এই সপ্তাহে শুধুমাত্র শনিবার সকাল ৯টা থেকে সন্ধ্যা ৫টা পর্যন্ত অফলাইন চেম্বার। সোম থেকে বৃহস্পতিবার অনলাইন।
             - Fee: প্রথম ভিজিট ১০০০ টাকা, ফলোআপ ৬০০ টাকা।
             - Location: চেম্বারের ঠিকানা: ২/১, জাহেদা ভিলা, শ্যামলী কল্যাণ সমিতি, শ্যামলী, ঢাকা-১২০৭। 
             
-            Rules:
-            1. Unrelated message: {"action": "ignore"}
-            2. FAQ / Schedule asking: {"action": "reply", "message": "ডা. দেবজ্যোতি দত্ত এই সপ্তাহে শুধুমাত্র শনিবার সকাল ৯টা থেকে সন্ধ্যা ৫টা পর্যন্ত চেম্বারে বসবেন। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)"}
-            3. Online consultation: {"action": "reply", "message": "অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বারে হোয়াটসঅ্যাপে জানান।"}
-            4. Booking without name/phone: {"action": "reply", "message": "অ্যাপয়েন্টমেন্ট নিতে অনুগ্রহ করে রোগীর নাম এবং মোবাইল নাম্বারটি দিন। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)"}
-            5. Booking with BOTH name and phone: {"action": "book", "name": "Patient Name", "phone": "Patient Phone"}
+            JSON Actions:
+            1. Unrelated: {"action": "ignore"}
+            2. FAQ (Fee, Location, Time, Schedule): {"action": "reply", "message": "ডা. দেবজ্যোতি দত্তের ফি প্রথম ভিজিট ১০০০ টাকা (ফলোআপ ৬০০ টাকা)। এই সপ্তাহে তিনি শুধুমাত্র শনিবার সকাল ৯টা থেকে সন্ধ্যা ৫টা পর্যন্ত শ্যামলী ২/১, জাহেদা ভিলা চেম্বারে বসবেন। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)"}
+            3. Online consultation: {"action": "reply", "message": "অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বারে হোয়াটসঅ্যাপে ম্যাসেজ করে জানান।"}
+            4. Booking missing name/phone: {"action": "reply", "message": "অ্যাপয়েন্টমেন্ট নিতে অনুগ্রহ করে রোগীর নাম এবং মোবাইল নাম্বারটি দিন।"}
+            5. Booking with name and phone: {"action": "book", "name": "Patient Name", "phone": "Patient Phone"}
 
             User Message: ${msg_body}`;
 
-            // 503 বা হাই ডিমান্ড আসলে ব্যাকআপ মডেল দিয়ে হ্যান্ডেল করার ফাংশন
             let response;
             try {
                 response = await ai.models.generateContent({
@@ -108,9 +107,10 @@ async function startSock() {
                     contents: promptText
                 });
             } catch (err) {
-                console.warn('gemini-3.6-flash busy (503), switching to fallback model...');
+                // একবার রিট্রাই
+                await new Promise(res => setTimeout(res, 1000));
                 response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
+                    model: 'gemini-3.6-flash',
                     contents: promptText
                 });
             }
@@ -138,12 +138,21 @@ async function startSock() {
             }
 
         } catch (error) {
-            console.error('Final Error handler:', error.message);
+            console.error('API Error, using smart text fallback:', error.message);
             
-            // কোনো কারণে সব মডেল ফেইল করলেও ইউজার যেন রেসপন্স পায়
-            await sock.sendMessage(senderJid, { 
-                text: "ডা. দেবজ্যোতি দত্তের চেম্বারে আপনাকে স্বাগতম। অ্যাপয়েন্টমেন্ট বা সিরিয়ালের জন্য অনুগ্রহ করে রোগীর নাম ও মোবাইল নাম্বারটি দিন। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)" 
-            });
+            // স্মার্ট ফলব্যাক: ইউজার কী লিখেছে তার ওপর ভিত্তি করে নিরাপদ উত্তর দেওয়া
+            const textLower = msg_body.toLowerCase();
+            let fallbackReply = "ডা. দেবজ্যোতি দত্তের চেম্বারে আপনাকে স্বাগতম। বিস্তারিত জানতে বা অ্যাপয়েন্টমেন্ট নিতে রোগীর নাম ও মোবাইল নাম্বার দিয়ে মেসেজ করুন।";
+            
+            if (textLower.includes('ফি') || textLower.includes('fee') || textLower.includes('টাকা')) {
+                fallbackReply = "ডা. দেবজ্যোতি দত্তের প্রথম ভিজিট ফি ১০০০ টাকা এবং ফলোআপ ৬০০ টাকা। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)";
+            } else if (textLower.includes('কোথায়') || textLower.includes('ঠিকানা') || textLower.includes('location')) {
+                fallbackReply = "চেম্বারের ঠিকানা: ২/১, জাহেদা ভিলা, শ্যামলী কল্যাণ সমিতি, শ্যামলী, ঢাকা-১২০৭।";
+            } else if (textLower.includes('অনলাইন')) {
+                fallbackReply = "অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বারে হোয়াটসঅ্যাপে ম্যাসেজ করে জানান।";
+            }
+
+            await sock.sendMessage(senderJid, { text: fallbackReply });
         }
     });
 }
