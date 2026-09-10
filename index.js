@@ -15,7 +15,17 @@ const knownNumbers = ['8801712854941@c.us', '8801900000000@c.us'];
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox'] // রেন্ডারের জন্য জরুরি
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process', // রেন্ডারের ফ্রি সার্ভারের জন্য এটি অত্যন্ত জরুরি
+            '--disable-gpu'
+        ]
     }
 });
 
