@@ -16,16 +16,25 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--single-process', // রেন্ডারের ফ্রি সার্ভারের জন্য এটি অত্যন্ত জরুরি
             '--disable-gpu',
-            '--remote-debugging-port=9222'
+            '--no-zygote',
+            '--single-process',
+            '--disable-setuid-sandbox',
+            '--disable-extensions',
+            '--disable-software-rasterizer',
+            '--disable-infobars',
+            '--disable-breakpad',
+            '--disable-canvas-aa',
+            '--disable-2d-canvas-clip-aa',
+            '--disable-gl-drawing-for-tests',
+            '--hide-scrollbars',
+            '--mute-audio',
+            '--no-pings'
         ]
     }
 });
