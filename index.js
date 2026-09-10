@@ -81,49 +81,51 @@ async function startSock() {
         console.log("রিসিভড মেসেজ:", msg_body);
 
         try {
-            // বর্তমান তারিখ ও দিন বের করা (যাতে জেমিনাই বুঝতে পারে আজ কী বার)
-            // বর্তমান তারিখ ও দিন বের করা
             const todayDate = new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' });
 
-            const response = await ai.models.generateContent({
-                model: 'gemini-3.6-flash',
-                contents: `System: You are a polite and expert assistant for Md Khairul Bashar's medical clinic. Analyze the user's message and respond ONLY in valid JSON format.
-                Current Date & Time: ${todayDate}
-                
-                ==================================================
-                👉 [এই অংশটি আপনি প্রতি সপ্তাহে আপডেট করে দিতে পারবেন]:
-                - Current Week Offline Schedule: ডা. দেবজ্যোতি দত্ত এই সপ্তাহে শুধুমাত্র শনিবার (১২ সেপ্টেম্বর, ২০২৬) সকাল ৯টা থেকে সন্ধ্যা ৫টা পর্যন্ত অফলাইন চেম্বারে বসবেন। 
-                - Online Consultation: সোম থেকে বৃহস্পতিবার অনলাইন পরামর্শ চলবে।
-                ==================================================
+            const promptText = `System: You are a polite and expert assistant for Md Khairul Bashar's medical clinic. Analyze the user's message and respond ONLY in valid JSON format.
+            Current Date: ${todayDate}
+            
+            Clinic Info:
+            - Schedule: এই সপ্তাহে শুধুমাত্র শনিবার সকাল ৯টা থেকে সন্ধ্যা ৫টা পর্যন্ত অফলাইন চেম্বার। সোম থেকে বৃহস্পতিবার অনলাইন।
+            - Fee: প্রথম ভিজিট ১০০০ টাকা, ফলোআপ ৬০০ টাকা।
+            - Location: চেম্বারের ঠিকানা: ২/১, জাহেদা ভিলা, শ্যামলী কল্যাণ সমিতি, শ্যামলী, ঢাকা-১২০৭। 
+            
+            Rules:
+            1. Unrelated message: {"action": "ignore"}
+            2. FAQ / Schedule asking: {"action": "reply", "message": "ডা. দেবজ্যোতি দত্ত এই সপ্তাহে শুধুমাত্র শনিবার সকাল ৯টা থেকে সন্ধ্যা ৫টা পর্যন্ত চেম্বারে বসবেন। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)"}
+            3. Online consultation: {"action": "reply", "message": "অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বারে হোয়াটসঅ্যাপে জানান।"}
+            4. Booking without name/phone: {"action": "reply", "message": "অ্যাপয়েন্টমেন্ট নিতে অনুগ্রহ করে রোগীর নাম এবং মোবাইল নাম্বারটি দিন। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)"}
+            5. Booking with BOTH name and phone: {"action": "book", "name": "Patient Name", "phone": "Patient Phone"}
 
-                Clinic Information:
-                - Consultation Fee: ১০০০ টাকা (প্রথম ভিজিট)। ফলোআপ ৬০০ টাকা।
-                - Location: চেম্বারের ঠিকানা: ২/১, জাহেদা ভিলা, শ্যামলী কল্যাণ সমিতি, শ্যামলী, ঢাকা-১২০৭। 
-                  গুগল ম্যাপ লিঙ্ক: https://maps.app.goo.gl/NgPzAZamW3Ucy8799
-                - Services: বিভিন্ন রোগের চিকিৎসা, ডায়াবেটিস, গ্যাস্ট্রিক এবং রুটিন চেকআপ, সা‍র্জারির কোন বিষয় দেখা হয় না।
-                
-                Rules for JSON Output:
-                1. Unrelated Message: If the message is completely unrelated to medical, doctors, appointments, or healthcare, return EXACTLY: {"action": "ignore"}
-                2. General Info/Schedule/FAQ: If they ask about fees, time, location, or available days, return EXACTLY: {"action": "reply", "message": "ডা. দেবজ্যোতি দত্তের এই সপ্তাহের শিডিউল অনুযায়ী তিনি কেবল শনিবার সকাল ৯টা থেকে সন্ধ্যা ৫টা পর্যন্ত অফলাইন চেম্বারে বসবেন। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)"}
-                3. Online Consultation: If they want to consult online (অনলাইনে দেখানো), return EXACTLY: {"action": "reply", "message": "অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বারে হোয়াটসঅ্যাপে ম্যাসেজ করে জানান।"}
-                4. Incomplete Booking: If they want to book an offline appointment but have not provided BOTH their Name and Phone Number, return EXACTLY: {"action": "reply", "message": "অফলাইন চেম্বারের অ্যাপয়েন্টমেন্ট নিতে অনুগ্রহ করে রোগীর নাম এবং মোবাইল নাম্বারটি দিন। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)"}
-                5. Complete Booking: If they want to book an appointment and HAVE PROVIDED both their Name and Phone Number, return EXACTLY: {"action": "book", "name": "Patient Name", "phone": "Patient Phone"}
-                
-                User: ${msg_body}`
-            });
+            User Message: ${msg_body}`;
 
-            const aiData = JSON.parse(response.text.replace(/```json/g, '').replace(/`{3}/g, '').trim());
+            // 503 বা হাই ডিমান্ড আসলে ব্যাকআপ মডেল দিয়ে হ্যান্ডেল করার ফাংশন
+            let response;
+            try {
+                response = await ai.models.generateContent({
+                    model: 'gemini-3.6-flash',
+                    contents: promptText
+                });
+            } catch (err) {
+                console.warn('gemini-3.6-flash busy (503), switching to fallback model...');
+                response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: promptText
+                });
+            }
+
+            let rawText = response.text.trim();
+            rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+            const aiData = JSON.parse(rawText);
+
             let finalReply = "";
 
             if (aiData.action === 'ignore') {
                 return;
-            } 
-            else if (aiData.action === 'reply') {
+            } else if (aiData.action === 'reply') {
                 finalReply = aiData.message;
-            } 
-            else if (aiData.action === 'book') {
-                // গুগল শিটে ডেটা পাঠানো (শিট ফাঁকা থাকলে বা স্ল이트 খালি থাকলে এন্ট্রি নেবে, 
-                // আপনার শিটের ফর্মুলা বা অ্যাপস স্ক্রিপ্ট অনুযায়ী পরবর্তী রবিবারের হিসাব বা বর্তমান সপ্তাহের হিসাব মেইনটেইন হবে)
+            } else if (aiData.action === 'book') {
                 const sheetResponse = await axios.post(GOOGLE_SHEET_URL, {
                     name: aiData.name,
                     phone: aiData.phone
@@ -136,7 +138,12 @@ async function startSock() {
             }
 
         } catch (error) {
-            console.error('Error processing message:', error);
+            console.error('Final Error handler:', error.message);
+            
+            // কোনো কারণে সব মডেল ফেইল করলেও ইউজার যেন রেসপন্স পায়
+            await sock.sendMessage(senderJid, { 
+                text: "ডা. দেবজ্যোতি দত্তের চেম্বারে আপনাকে স্বাগতম। অ্যাপয়েন্টমেন্ট বা সিরিয়ালের জন্য অনুগ্রহ করে রোগীর নাম ও মোবাইল নাম্বারটি দিন। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)" 
+            });
         }
     });
 }
