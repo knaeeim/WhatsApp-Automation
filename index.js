@@ -1,27 +1,34 @@
 const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const { GoogleGenAI } = require('@google/genai');
 const pino = require('pino');
-const qrcode = require('qrcode');
+const express = require('express'); // এক্সপ্রেস যোগ করা হলো
 const axios = require('axios');
 require('dotenv').config();
+
+// রেন্ডারকে সন্তুষ্ট করার জন্য একটি ডামি ওয়েব সার্ভার
+const app = express();
+app.get('/', (req, res) => {
+    res.send('WhatsApp Bot is running smoothly!');
+});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server is listening on port ${PORT}`);
+});
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const GOOGLE_SHEET_URL = process.env.GOOGLE_SHEET_URL || 'আপনার_গুগল_শিটের_ওয়েব_অ্যাপ_ইউআরএল_এখানে_দিন';
 
-// পরিচিত নাম্বার (কান্ট্রি কোড সহ, যেমন: 8801712854941)
 const knownNumbers = ['8801712854941']; 
 
 async function startSock() {
-    // সেশন সেভ করার জন্য 'auth_info_baileys' ফোল্ডার ব্যবহার করা হবে
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: false, // টার্মিনালে ভাঙা QR এড়াতে এটি ফলস রাখা হলো
-        logger: pino({ level: 'silent' }) // লগের অতিরিক্ত ঝামেলা এড়াতে
+        printQRInTerminal: false,
+        logger: pino({ level: 'silent' })
     });
 
-    // ১. QR কোড জেনারেট করার অংশ (লিংক আকারে দেখাবে)
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         
@@ -46,27 +53,23 @@ async function startSock() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // ২. ইনকামিং মেসেজ হ্যান্ডেল করার অংশ
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
 
         const msg = messages[0];
         if (!msg.message || msg.key.fromMe) return;
 
-        const senderJid = msg.key.remoteJid; // যেমন: 880123456789@s.whatsapp.net
+        const senderJid = msg.key.remoteJid;
         const senderNumber = senderJid.split('@')[0];
 
-        // গ্রুপ চ্যাট বা নিজের নাম্বার হলে ইগনোর করবে
         if (senderJid.endsWith('@g.us') || knownNumbers.includes(senderNumber)) {
             return;
         }
 
-        // মেসেজের টেক্সট বের করা
         const msg_body = msg.message.conversation || msg.message.extendedTextMessage?.text;
         if (!msg_body) return;
 
         try {
-            // জেমিনাই এআই প্রম্পট
             const response = await ai.models.generateContent({
                 model: 'gemini-3.6-flash',
                 contents: `System: You are a polite and expert assistant for Md Khairul Bashar's medical clinic. Analyze the user's message and respond ONLY in valid JSON format.
@@ -83,7 +86,7 @@ async function startSock() {
                 Rules for JSON Output:
                 1. Unrelated Message: If the message is completely unrelated to medical, doctors, appointments, or healthcare, return EXACTLY: {"action": "ignore"}
                 2. General Info/FAQ: If they ask about fees, time, location, or available services, return EXACTLY: {"action": "reply", "message": "Your helpful response in Bengali. Always add this reminder at the end: 'বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।'"}
-                3. Online Consultation: If they want to consult online (অনলাইনে দেখানো), return EXACTLY: {"action": "reply", "message": "অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বারের হোয়াটসঅ্যাপে ম্যাসেজ করে জানান।"}
+                3. Online Consultation: If they want to consult online (অনলাইনে দেখানো), return EXACTLY: {"action": "reply", "message": "অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বارهای হোয়াটসঅ্যাপে ম্যাসেজ করে জানান।"}
                 4. Incomplete Booking: If they want to book an appointment but have not provided BOTH their Name and Phone Number, return EXACTLY: {"action": "reply", "message": "অ্যাপয়েন্টমেন্ট নিতে অনুগ্রহ করে রোগীর নাম এবং মোবাইল নাম্বারটি দিন।"}
                 5. Complete Booking: If they want to book an appointment and HAVE PROVIDED both their Name and Phone Number, return EXACTLY: {"action": "book", "name": "Patient Name", "phone": "Patient Phone"}
                 
@@ -100,7 +103,6 @@ async function startSock() {
                 finalReply = aiData.message;
             } 
             else if (aiData.action === 'book') {
-                // গুগল শিটে ডেটা পাঠানো এবং ফর্মুলার মেসেজ নিয়ে আসা
                 const sheetResponse = await axios.post(GOOGLE_SHEET_URL, {
                     name: aiData.name,
                     phone: aiData.phone
@@ -108,7 +110,6 @@ async function startSock() {
                 finalReply = sheetResponse.data.replyMessage;
             }
 
-            // ৩. রোগীর নাম্বারে মেসেজ পাঠানো
             if (finalReply) {
                 await sock.sendMessage(senderJid, { text: finalReply });
             }
