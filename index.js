@@ -20,9 +20,13 @@ const client = new Client({
 });
 
 // ১. টার্মিনালে QR কোড জেনারেট করা
+// ১. QR কোড লিংকে রূপান্তর করা
 client.on('qr', (qr) => {
-    qrcode.generate(qr, { small: true });
-    console.log('উপরের QR কোডটি আপনার ফোনের Linked Devices অপশন থেকে স্ক্যান করুন!');
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qr)}&size=400x400`;
+    console.log('\n\n=========================================================');
+    console.log('QR কোড স্ক্যান করতে নিচের লিংকে ক্লিক করুন (অথবা কপি করে ব্রাউজারে ওপেন করুন):');
+    console.log(qrUrl);
+    console.log('=========================================================\n\n');
 });
 
 client.on('ready', () => {
