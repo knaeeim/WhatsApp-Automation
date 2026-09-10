@@ -81,24 +81,53 @@ async function startSock() {
         console.log("রিসিভড মেসেজ:", msg_body);
 
         try {
-            const todayDate = new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' });
+            // আজকের তারিখ, বার এবং সময় বের করা
+            const now = new Date();
+            const todayStr = now.toLocaleDateString('bn-BD', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                timeZone: 'Asia/Dhaka' 
+            });
 
-            const promptText = `System: You are an expert assistant for Dr. Debajyoti Datta's clinic. Analyze user message and return ONLY valid JSON format.
-            Current Date: ${todayDate}
-            
-            Info:
-            - Schedule: এই সপ্তাহে শুধুমাত্র শনিবার সকাল ৯টা থেকে সন্ধ্যা ৫টা পর্যন্ত অফলাইন চেম্বার। সোম থেকে বৃহস্পতিবার অনলাইন।
-            - Fee: প্রথম ভিজিট ১০০০ টাকা, ফলোআপ ৬০০ টাকা।
-            - Location: চেম্বারের ঠিকানা: ২/১, জাহেদা ভিলা, শ্যামলী কল্যাণ সমিতি, শ্যামলী, ঢাকা-১২০৭। 
-            
-            JSON Actions:
-            1. Unrelated: {"action": "ignore"}
-            2. FAQ (Fee, Location, Time, Schedule): {"action": "reply", "message": "ডা. দেবজ্যোতি দত্তের ফি প্রথম ভিজিট ১০০০ টাকা (ফলোআপ ৬০০ টাকা)। এই সপ্তাহে তিনি শুধুমাত্র শনিবার সকাল ৯টা থেকে সন্ধ্যা ৫টা পর্যন্ত শ্যামলী ২/১, জাহেদা ভিলা চেম্বারে বসবেন। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)"}
-            3. Online consultation: {"action": "reply", "message": "অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বারে হোয়াটসঅ্যাপে ম্যাসেজ করে জানান।"}
-            4. Booking missing name/phone: {"action": "reply", "message": "অ্যাপয়েন্টমেন্ট নিতে অনুগ্রহ করে রোগীর নাম এবং মোবাইল নাম্বারটি দিন।"}
-            5. Booking with name and phone: {"action": "book", "name": "Patient Name", "phone": "Patient Phone"}
+            /*
+              👉 প্রতি সপ্তাহে শুধু নিচের এই ৩টি লাইন পরিবর্তন করবেন:
+            */
+            const currentWeekConfig = {
+                fridayAvailable: false,   // এই সপ্তাহে শুক্রবারে বসবেন কি না (true / false)
+                saturdayAvailable: true,  // এই সপ্তাহে শনিবারে বসবেন কি না (true / false)
+                fridayDate: "11/09/2026",
+                saturdayDate: "12/09/2026"
+            };
 
-            User Message: ${msg_body}`;
+            const promptText = `System: You are an intelligent medical assistant for Dr. Debajyoti Datta.
+Today is: ${todayStr}.
+
+Schedule for this week:
+- Friday (${currentWeekConfig.fridayDate}): ${currentWeekConfig.fridayAvailable ? "Available (সকাল ৯টা - সন্ধ্যা ৫টা)" : "OFF (বসবেন না)"}
+- Saturday (${currentWeekConfig.saturdayDate}): ${currentWeekConfig.saturdayAvailable ? "Available (সকাল ৯টা - সন্ধ্যা ৫টা)" : "OFF (বসবেন না)"}
+- Online consultation: Mon-Thu (Contact: +8801953950500)
+- Fees: 1st visit 1000 TK, Follow-up 600 TK. Location: শ্যামলী ২/১ জাহেদা ভিলা।
+
+Rules for JSON Response:
+1. If patient asks for Friday, but Friday is OFF:
+   Return: {"action": "reply", "message": "ডা. দেবজ্যোতি দত্ত এই সপ্তাহে শুক্রবারে চেম্বারে বসছেন না, তিনি শুধুমাত্র শনিবার (${currentWeekConfig.saturdayDate}) বসবেন। আপনি কি শনিবারে দেখাতে চান? জানালে সিরিয়াল বুক করে দিচ্ছি।"}
+
+2. If patient asks for Saturday, but Saturday is OFF:
+   Return: {"action": "reply", "message": "ডা. দেবজ্যোতি দত্ত এই সপ্তাহে শনিবারে বসছেন না, তিনি শুধুমাত্র শুক্রবার (${currentWeekConfig.fridayDate}) বসবেন। আপনি কি শুক্রবারে দেখাতে চান?"}
+
+3. If patient wants to book, but hasn't provided Name & Phone:
+   Return: {"action": "reply", "message": "অ্যাপয়েন্টমেন্টের জন্য অনুগ্রহ করে রোগীর নাম এবং মোবাইল নাম্বারটি দিন। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)"}
+
+4. If patient provides Name, Phone, and the requested day is VALID and CONFIRMED:
+   Determine the targetDate (${currentWeekConfig.saturdayAvailable && !currentWeekConfig.fridayAvailable ? currentWeekConfig.saturdayDate : currentWeekConfig.fridayDate})
+   Return: {"action": "book", "name": "Patient Name", "phone": "Patient Phone", "date": "Target Date"}
+
+5. FAQ (Fee/Location/Timing):
+   Return: {"action": "reply", "message": "Helpful response in Bengali."}
+
+User message: ${msg_body}`;
 
             let response;
             try {
@@ -107,7 +136,7 @@ async function startSock() {
                     contents: promptText
                 });
             } catch (err) {
-                // একবার রিট্রাই
+                console.warn('Retrying Gemini API once...', err.message);
                 await new Promise(res => setTimeout(res, 1000));
                 response = await ai.models.generateContent({
                     model: 'gemini-3.6-flash',
@@ -115,8 +144,7 @@ async function startSock() {
                 });
             }
 
-            let rawText = response.text.trim();
-            rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+            let rawText = response.text.trim().replace(/```json/g, '').replace(/```/g, '').trim();
             const aiData = JSON.parse(rawText);
 
             let finalReply = "";
@@ -126,9 +154,11 @@ async function startSock() {
             } else if (aiData.action === 'reply') {
                 finalReply = aiData.message;
             } else if (aiData.action === 'book') {
+                // গুগল শিটে নাম, ফোন এবং নির্দিষ্ট তারিখ পাঠানো হচ্ছে
                 const sheetResponse = await axios.post(GOOGLE_SHEET_URL, {
                     name: aiData.name,
-                    phone: aiData.phone
+                    phone: aiData.phone,
+                    date: aiData.date
                 });
                 finalReply = sheetResponse.data.replyMessage;
             }
@@ -138,20 +168,15 @@ async function startSock() {
             }
 
         } catch (error) {
-            console.error('API Error, using smart text fallback:', error.message);
-            
-            // স্মার্ট ফলব্যাক: ইউজার কী লিখেছে তার ওপর ভিত্তি করে নিরাপদ উত্তর দেওয়া
+            console.error('Error processing message:', error.message);
+            // স্মার্ট ফলব্যাক
             const textLower = msg_body.toLowerCase();
             let fallbackReply = "ডা. দেবজ্যোতি দত্তের চেম্বারে আপনাকে স্বাগতম। বিস্তারিত জানতে বা অ্যাপয়েন্টমেন্ট নিতে রোগীর নাম ও মোবাইল নাম্বার দিয়ে মেসেজ করুন।";
-            
             if (textLower.includes('ফি') || textLower.includes('fee') || textLower.includes('টাকা')) {
                 fallbackReply = "ডা. দেবজ্যোতি দত্তের প্রথম ভিজিট ফি ১০০০ টাকা এবং ফলোআপ ৬০০ টাকা। (বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।)";
-            } else if (textLower.includes('কোথায়') || textLower.includes('ঠিকানা') || textLower.includes('location')) {
+            } else if (textLower.includes('কোথায়') || textLower.includes('ঠিকানা')) {
                 fallbackReply = "চেম্বারের ঠিকানা: ২/১, জাহেদা ভিলা, শ্যামলী কল্যাণ সমিতি, শ্যামলী, ঢাকা-১২০৭।";
-            } else if (textLower.includes('অনলাইন')) {
-                fallbackReply = "অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বারে হোয়াটসঅ্যাপে ম্যাসেজ করে জানান।";
             }
-
             await sock.sendMessage(senderJid, { text: fallbackReply });
         }
     });
