@@ -16,7 +16,7 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
+        // executablePath বাদ দেওয়া হলো, যাতে এটি নিজে থেকেই ব্রাউজার খুঁজে নেয়
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -24,17 +24,8 @@ const client = new Client({
             '--disable-gpu',
             '--no-zygote',
             '--single-process',
-            '--disable-setuid-sandbox',
             '--disable-extensions',
-            '--disable-software-rasterizer',
-            '--disable-infobars',
-            '--disable-breakpad',
-            '--disable-canvas-aa',
-            '--disable-2d-canvas-clip-aa',
-            '--disable-gl-drawing-for-tests',
-            '--hide-scrollbars',
-            '--mute-audio',
-            '--no-pings'
+            '--disable-software-rasterizer'
         ]
     }
 });
