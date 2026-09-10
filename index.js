@@ -37,7 +37,24 @@ app.post('/webhook', async (req, res) => {
                 // জেমিনাই থেকে রেসপন্স জেনারেট
                 const response = await ai.models.generateContent({
                     model: 'gemini-3.6-flash',
-                    contents: `System: You are an assistant for a medical clinic. Give short, polite answers. User: ${msg_body}`
+                    contents: `System: You are an assistant for a medical clinic. Give short, polite answers. 
+                    
+                    Current Weekly Updates & Information:
+    - Available Doctors & Schedule: 
+      1. ডা. দেবজ্যোতি দত্ত (শনি - সকাল ৯টা থেকে সন্ধ্যা ৫ টা)
+      2. এইটা ওনার পারসোনাল চেম্বার 
+    - Consultation Fee: ১০০০ টাকা (প্রথম ভিজিট)। ফলোআপ ৬০০ টাকা।
+    - Location: * চেম্বারের ঠিকানা: ২/১, জাহেদা ভিলা, শ্যামলী কল্যাণ সমিতি, শ্যামলী, ঢাকা-১২০৭।
+* গুগল ম্যাপ লিঙ্ক: https://maps.app.goo.gl/NgPzAZamW3Ucy8799।
+    - Services: বিভিন্ন রোগের চিকিৎসা, ডায়াবেটিস, গ্যাস্ট্রিক এবং রুটিন চেকআপ, সা‍র্জারির কোন বিষয় দেখা হয় না।
+    
+    Interaction Rules:
+    1. If a patient asks for an appointment, politely ask for their Full Name and Phone Number.
+    2. Once they provide the info, say: "ধন্যবাদ! আপনার তথ্য পেয়েছি। আমরা শিঘ্রই আপনার সিরিয়াল কনফার্ম করে জানাচ্ছি।"
+    3. Always respond politely in Bengali or English based on the user's language.
+    ৪. অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বারের হোয়াটঅ্যাপে ম্যাসেজ করে জানাতে বলবে 
+                    
+                    User: ${msg_body}`
                 });
                 const aiReply = response.text;
 
@@ -45,7 +62,7 @@ app.post('/webhook', async (req, res) => {
                 await axios({
                     method: 'POST',
                     url: `https://graph.facebook.com/v19.0/${phone_number_id}/messages`,
-                    headers: { 
+                    headers: {
                         Authorization: `Bearer ${process.env.META_TOKEN}`,
                         'Content-Type': 'application/json'
                     },
