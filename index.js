@@ -1,86 +1,100 @@
-const express = require('express');
-const axios = require('axios');
+const { Client, LocalAuth } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
 const { GoogleGenAI } = require('@google/genai');
+const axios = require('axios');
 require('dotenv').config();
-
-const app = express();
-app.use(express.json());
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// মেটা Webhook ভেরিফিকেশন রাউট (Meta API-এর রিকোয়ারমেন্ট)
-app.get('/webhook', (req, res) => {
-    const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
+// এখানে আপনার গুগল শিটের Web App URL দিন
+const GOOGLE_SHEET_URL = process.env.GOOGLE_SHEET_URL || 'আপনার_কপি_করা_GOOGLE_APP_SCRIPT_WEB_APP_URL_এখানে_দিন';
 
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-        res.status(200).send(challenge);
-    } else {
-        res.sendStatus(403);
+// পরিচিত নাম্বার (কান্ট্রি কোড সহ এবং শেষে @c.us দিতে হবে)
+const knownNumbers = ['8801712854941@c.us', '8801900000000@c.us'];
+
+const client = new Client({
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+        args: ['--no-sandbox', '--disable-setuid-sandbox'] // রেন্ডারের জন্য জরুরি
     }
 });
 
-// ইনকামিং মেসেজ রিসিভ এবং জেমিনাই এর উত্তর পাঠানো
-app.post('/webhook', async (req, res) => {
-    const body = req.body;
+// ১. টার্মিনালে QR কোড জেনারেট করা
+client.on('qr', (qr) => {
+    qrcode.generate(qr, { small: true });
+    console.log('উপরের QR কোডটি আপনার ফোনের Linked Devices অপশন থেকে স্ক্যান করুন!');
+});
 
-    if (body.object === 'whatsapp_business_account') {
-        const entry = body.entry?.[0]?.changes?.[0]?.value;
-        if (entry?.messages) {
-            const phone_number_id = entry.metadata.phone_number_id;
-            const from = entry.messages[0].from;
-            const msg_body = entry.messages[0].text.body;
+client.on('ready', () => {
+    console.log('WhatsApp Bot is Ready and Connected!');
+});
 
-            try {
-                // জেমিনাই থেকে রেসপন্স জেনারেট
-                const response = await ai.models.generateContent({
-                    model: 'gemini-3.6-flash',
-                    contents: `System: You are an assistant for a medical clinic. Give short, polite answers. 
-                    
-                    Current Weekly Updates & Information:
-    - Available Doctors & Schedule: 
-      1. ডা. দেবজ্যোতি দত্ত (শনি - সকাল ৯টা থেকে সন্ধ্যা ৫ টা)
-      2. এইটা ওনার পারসোনাল চেম্বার 
-    - Consultation Fee: ১০০০ টাকা (প্রথম ভিজিট)। ফলোআপ ৬০০ টাকা।
-    - Location: * চেম্বারের ঠিকানা: ২/১, জাহেদা ভিলা, শ্যামলী কল্যাণ সমিতি, শ্যামলী, ঢাকা-১২০৭।
-* গুগল ম্যাপ লিঙ্ক: https://maps.app.goo.gl/NgPzAZamW3Ucy8799।
-    - Services: বিভিন্ন রোগের চিকিৎসা, ডায়াবেটিস, গ্যাস্ট্রিক এবং রুটিন চেকআপ, সা‍র্জারির কোন বিষয় দেখা হয় না।
-    
-    Interaction Rules:
-    1. If a patient asks for an appointment, politely ask for their Full Name and Phone Number.
-    2. Once they provide the info, say: "ধন্যবাদ! আপনার তথ্য পেয়েছি। আমরা শিঘ্রই আপনার সিরিয়াল কনফার্ম করে জানাচ্ছি।"
-    3. Always respond politely in Bengali or English based on the user's language.
-    ৪. অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বারের হোয়াটঅ্যাপে ম্যাসেজ করে জানাতে বলবে 
-                    
-                    User: ${msg_body}`
-                });
-                const aiReply = response.text;
+// ২. মেসেজ রিসিভ এবং প্রসেস করা
+client.on('message', async msg => {
+    // স্ট্যাটাস আপডেট বা আপনি নিজে ম্যানুয়ালি রিপ্লাই দিলে বট ইগনোর করবে
+    if (msg.from === 'status@broadcast' || msg.fromMe) return;
 
-                // হোয়াটসঅ্যাপে মেসেজ পাঠানো
-                await axios({
-                    method: 'POST',
-                    url: `https://graph.facebook.com/v19.0/${phone_number_id}/messages`,
-                    headers: {
-                        Authorization: `Bearer ${process.env.META_TOKEN}`,
-                        'Content-Type': 'application/json'
-                    },
-                    data: {
-                        messaging_product: 'whatsapp',
-                        to: from,
-                        text: { body: aiReply }
-                    }
-                });
-            } catch (error) {
-                console.error('Error:', error);
-            }
+    // পরিচিত নাম্বার হলে ইগনোর করবে
+    if (knownNumbers.includes(msg.from)) {
+        console.log('Ignored message from known number:', msg.from);
+        return;
+    }
+
+    const msg_body = msg.body;
+    const from = msg.from;
+
+    try {
+        // জেমিনাইকে ইনটেন্ট বোঝার জন্য স্পেশাল প্রম্পট
+        // জেমিনাইকে ইনটেন্ট বোঝার জন্য স্পেশাল প্রম্পট এবং আপনার ক্লিনিকের কনটেক্সট
+        const response = await ai.models.generateContent({
+            model: 'gemini-3.6-flash',
+            contents: `System: You are a polite and expert assistant for Md Khairul Bashar's medical clinic. Analyze the user's message and respond ONLY in valid JSON format.
+            
+            Clinic Information:
+            - Available Doctors & Schedule: 
+              1. ডা. দেবজ্যোতি দত্ত (শনি - সকাল ৯টা থেকে সন্ধ্যা ৫ টা)
+              2. এইটা ওনার পারসোনাল চেম্বার।
+            - Consultation Fee: ১০০০ টাকা (প্রথম ভিজিট)। ফলোআপ ৬০০ টাকা।
+            - Location: চেম্বারের ঠিকানা: ২/১, জাহেদা ভিলা, শ্যামলী কল্যাণ সমিতি, শ্যামলী, ঢাকা-১২০৭। 
+              গুগল ম্যাপ লিঙ্ক: https://maps.app.goo.gl/NgPzAZamW3Ucy8799
+            - Services: বিভিন্ন রোগের চিকিৎসা, ডায়াবেটিস, গ্যাস্ট্রিক এবং রুটিন চেকআপ, সা‍র্জারির কোন বিষয় দেখা হয় না।
+            
+            Rules for JSON Output:
+            1. Unrelated Message: If the message is completely unrelated to medical, doctors, appointments, or healthcare, return EXACTLY: {"action": "ignore"}
+            2. General Info/FAQ: If they ask about fees, time, location, or available services, return EXACTLY: {"action": "reply", "message": "Your helpful response in Bengali. Always add this reminder at the end: 'বি.দ্র: আসার আগে অবশ্যই সিরিয়াল কনফার্ম করে আসবেন।'"}
+            3. Online Consultation: If they want to consult online (অনলাইনে দেখানো), return EXACTLY: {"action": "reply", "message": "অনলাইনে দেখাতে চাইলে +8801953950500 এই নাম্বারের হোয়াটসঅ্যাপে ম্যাসেজ করে জানান।"}
+            4. Incomplete Booking: If they want to book an appointment but have not provided BOTH their Name and Phone Number, return EXACTLY: {"action": "reply", "message": "অ্যাপয়েন্টমেন্ট নিতে অনুগ্রহ করে রোগীর নাম এবং মোবাইল নাম্বারটি দিন।"}
+            5. Complete Booking: If they want to book an appointment and HAVE PROVIDED both their Name and Phone Number, return EXACTLY: {"action": "book", "name": "Patient Name", "phone": "Patient Phone"}
+            
+            User: ${msg_body}`
+        });
+
+        const aiData = JSON.parse(response.text.replace(/```json/g, '').replace(/```/g, '').trim());
+        let finalReply = "";
+
+        if (aiData.action === 'ignore') {
+            return;
         }
-        res.sendStatus(200);
-    } else {
-        res.sendStatus(404);
+        else if (aiData.action === 'reply') {
+            finalReply = aiData.message;
+        }
+        else if (aiData.action === 'book') {
+            // গুগল শিটে ডেটা পাঠানো
+            const sheetResponse = await axios.post(GOOGLE_SHEET_URL, {
+                name: aiData.name,
+                phone: aiData.phone
+            });
+            finalReply = sheetResponse.data.replyMessage;
+        }
+
+        // ৩. হোয়াটসঅ্যাপে মেসেজ পাঠানো
+        if (finalReply) {
+            await client.sendMessage(from, finalReply);
+        }
+
+    } catch (error) {
+        console.error('Error processing message:', error);
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+client.initialize();
