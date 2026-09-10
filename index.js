@@ -36,7 +36,7 @@ app.post('/webhook', async (req, res) => {
             try {
                 // জেমিনাই থেকে রেসপন্স জেনারেট
                 const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
+                    model: 'gemini-3.6-flash',
                     contents: `System: You are an assistant for a medical clinic. Give short, polite answers. User: ${msg_body}`
                 });
                 const aiReply = response.text;
